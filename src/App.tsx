@@ -4,7 +4,7 @@ class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { error: string | null }
 > {
-  constructor(props: any) {
+  constructor(props: { children: React.ReactNode }) {
     super(props);
     this.state = { error: null };
   }
@@ -26,7 +26,7 @@ class ErrorBoundary extends React.Component<
             height: '100vh',
           }}
         >
-          <strong>CRASH — copy this and share it:</strong>\n\n{this.state.error}
+\          <strong>CRASH — copy this and share it:</strong>\n\n{this.state.error}
         </div>
       );
     return this.props.children;
@@ -39,7 +39,7 @@ const SUPABASE_URL = 'https://iuuhvostbnybioegwmvl.supabase.co';
 const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1dWh2b3N0Ym55YmlvZWd3bXZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NzM0MjgsImV4cCI6MjA4OTI0OTQyOH0.KG0HBqHza2eVaLWgw2uIoAEeTLlqDbyIM7Sm-OM4htk';
 // Helper wrappers that match Supabase client API
-async function sbSelect(table, cols, filters, single = false) {
+async function sbSelect(table: string, cols: string, filters?: Record<string, any>, single = false) {
   const params = new URLSearchParams({ select: cols });
   if (filters)
     Object.entries(filters).forEach(([k, v]) => params.set(k, 'eq.' + v));
@@ -57,7 +57,7 @@ async function sbSelect(table, cols, filters, single = false) {
     error: null,
   };
 }
-async function sbInsert(table, row) {
+async function sbInsert(table: string, row: Record<string, any>) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: 'POST',
     headers: {
@@ -74,7 +74,7 @@ async function sbInsert(table, row) {
     error: r.ok ? null : d,
   };
 }
-async function sbUpdate(table, row, col, val) {
+async function sbUpdate(table: string, row: Record<string, any>, col: string, val: any) {
   const r = await fetch(
     `${SUPABASE_URL}/rest/v1/${table}?${col}=eq.${encodeURIComponent(val)}`,
     {
@@ -90,13 +90,13 @@ async function sbUpdate(table, row, col, val) {
   return { error: r.ok ? null : await r.json() };
 }
 async function sbSelectOrdered(
-  table,
-  cols,
-  filterCol,
-  filterVal,
-  orderCol,
-  ascending,
-  limit
+  table: string,
+  cols: string,
+  filterCol: string,
+  filterVal: any,
+  orderCol: string,
+  ascending: boolean,
+  limit: number
 ) {
   const dir = ascending ? 'asc' : 'desc';
   const r = await fetch(
@@ -117,15 +117,15 @@ async function sbSelectOrdered(
 // ---------------------------------------------------------------------------
 // HELPERS
 // ---------------------------------------------------------------------------
-function fmt$(v) {
+function fmt$(v: any) {
   if (!v && v !== 0) return 'N/A';
   return '$' + Number(v).toLocaleString();
 }
-function fmtNum(v) {
+function fmtNum(v: any) {
   if (!v && v !== 0) return 'N/A';
   return Number(v).toLocaleString();
 }
-function haversine(lat1, lon1, lat2, lon2) {
+function haversine(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 3958.8;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
@@ -136,18 +136,17 @@ function haversine(lat1, lon1, lat2, lon2) {
       Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
-function normAddr(s) {
+function normAddr(s: string) {
   return s
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 }
-function buildListingUrl(comp) {
+function buildListingUrl(comp: any) {
   if (!comp)
     return 'https://www.onyxhomes.com/property-search/results/?searchtype=3&searchid=3458534';
   try {
-    // Support all possible field name conventions
     const street =
       comp.addressLine1 ||
       comp.address ||
@@ -183,7 +182,7 @@ function buildListingUrl(comp) {
     return 'https://www.onyxhomes.com/property-search/results/?searchtype=3&searchid=3458534';
   }
 }
-function typeCompatible(a, b) {
+function typeCompatible(a: string, b: string) {
   const t = ['condo', 'condominium', 'townhouse', 'townhome'];
   const aL = (a || '').toLowerCase(),
     bL = (b || '').toLowerCase();
@@ -192,7 +191,7 @@ function typeCompatible(a, b) {
     aL === bL
   );
 }
-async function hashPassword(pw) {
+async function hashPassword(pw: string) {
   const buf = await crypto.subtle.digest(
     'SHA-256',
     new TextEncoder().encode(pw)
@@ -205,7 +204,7 @@ async function hashPassword(pw) {
 // ---------------------------------------------------------------------------
 // SCORING
 // ---------------------------------------------------------------------------
-function scoreComp(subject, comp, distMiles, maxRadius) {
+function scoreComp(subject: any, comp: any, distMiles: number, maxRadius: number) {
   let d = 0;
   const bedDiff = Math.abs((comp.bedrooms || 0) - (subject.bedrooms || 0));
   if (bedDiff > 2) return null;
@@ -226,15 +225,15 @@ function scoreComp(subject, comp, distMiles, maxRadius) {
   d += Math.min(distMiles / maxRadius, 1) * 10;
   return Math.max(0, Math.round(100 - d));
 }
-function scoreLabel(score) {
+function scoreLabel(score: number) {
   if (score >= 85) return { label: 'Very Strong', color: '#c8a96e' };
   if (score >= 70) return { label: 'Strong', color: '#84cc16' };
   if (score >= 55) return { label: 'Good', color: '#eab308' };
   if (score >= 40) return { label: 'Fair', color: '#f97316' };
   return { label: 'Loose', color: '#ef4444' };
 }
-function keyDiffs(subject, comp) {
-  const diffs = [];
+function keyDiffs(subject: any, comp: any) {
+  const diffs: string[] = [];
   const sp = subject._displayPrice,
     cp = comp.price || comp.listPrice;
   if (sp && cp) {
@@ -259,8 +258,8 @@ function keyDiffs(subject, comp) {
   }
   return diffs.slice(0, 2);
 }
-function talkingPoints(subject, comp) {
-  const pts = [],
+function talkingPoints(subject: any, comp: any) {
+  const pts: string[] = [],
     bedDiff = Math.abs((comp.bedrooms || 0) - (subject.bedrooms || 0));
   if (bedDiff === 0) pts.push(`Same bedroom count (${comp.bedrooms} bed)`);
   else pts.push(`${comp.bedrooms} bed vs ${subject.bedrooms} bed`);
@@ -286,7 +285,7 @@ function talkingPoints(subject, comp) {
   }
   return pts;
 }
-function shortAnalysis(subject, comp, score) {
+function shortAnalysis(subject: any, comp: any, score: number) {
   const { label } = scoreLabel(score),
     bedMatch = (comp.bedrooms || 0) === (subject.bedrooms || 0);
   const sp = subject._displayPrice,
@@ -310,7 +309,7 @@ function shortAnalysis(subject, comp, score) {
     t += sDiff < 0.1 ? 'Size well-matched.' : 'Note size difference.';
   return t;
 }
-function buildAddress(prop) {
+function buildAddress(prop: any) {
   return [prop.addressLine1, prop.city, prop.state, prop.zipCode]
     .filter(Boolean)
     .join(', ');
@@ -321,20 +320,29 @@ function buildAddress(prop) {
 // ---------------------------------------------------------------------------
 const RADIUS_OPTIONS = [3, 5, 10, 15, 25],
   DEFAULT_RADIUS = 10;
-async function fetchSubjectProperty(address) {
-  const res = await fetch(
-    `https://api.rentcast.io/v1/properties?address=${encodeURIComponent(
-      address
-    )}&limit=1`,
-    { headers: { 'X-Api-Key': RENTCAST_KEY } }
-  );
-  if (!res.ok) throw new Error('Property lookup failed: ' + res.status);
-  const data = await res.json();
-  if (!Array.isArray(data) || data.length === 0)
-    throw new Error('Property not found. Try a more specific address.');
-  return data[0];
-}
-async function fetchSubjectListingPrice(address) {
+  async function fetchSubjectProperty(address: string) {
+    const res = await fetch(
+      `https://api.rentcast.io/v1/properties?address=${encodeURIComponent(address)}&limit=1`,
+      { headers: { 'X-Api-Key': RENTCAST_KEY } }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) return data[0];
+    }
+    const geoRes = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`,
+      { headers: { 'Accept-Language': 'en' } }
+    );
+    if (!geoRes.ok) throw new Error('Location lookup failed: ' + geoRes.status);
+    const geoData = await geoRes.json();
+    if (!geoData || geoData.length === 0)
+      throw new Error('Location not found. Try a more specific city or address.');
+    return {
+      latitude: parseFloat(geoData[0].lat),
+      longitude: parseFloat(geoData[0].lon),
+    };
+  }
+async function fetchSubjectListingPrice(address: string) {
   try {
     const res = await fetch(
       `https://api.rentcast.io/v1/listings/sale?address=${encodeURIComponent(
@@ -349,7 +357,7 @@ async function fetchSubjectListingPrice(address) {
   } catch (_) {}
   return null;
 }
-async function fetchAVMPrice(address) {
+async function fetchAVMPrice(address: string) {
   try {
     const res = await fetch(
       `https://api.rentcast.io/v1/avm/value?address=${encodeURIComponent(
@@ -364,9 +372,8 @@ async function fetchAVMPrice(address) {
   return null;
 }
 
-async function fetchActiveListings(lat, lng, radius) {
+async function fetchActiveListings(lat: number, lng: number, radius: number) {
   const base = `https://api.rentcast.io/v1/listings/sale?latitude=${lat}&longitude=${lng}&radius=${radius}&status=Active&limit=500`;
-  // Fetch Condo + Townhouse listings in parallel
   const [cR, tR] = await Promise.all([
     fetch(base + '&propertyType=Condo', {
       headers: { 'X-Api-Key': RENTCAST_KEY },
@@ -380,7 +387,7 @@ async function fetchActiveListings(lat, lng, radius) {
     tR.ok ? tR.json() : [],
   ]);
   const all = [...(cD || []), ...(tD || [])];
-  const seen = new Set();
+  const seen = new Set<string>();
   return all.filter((p) => {
     const k = p.id || p.addressLine1 + p.zipCode;
     if (seen.has(k)) return false;
@@ -389,20 +396,23 @@ async function fetchActiveListings(lat, lng, radius) {
   });
 }
 
-function findSimilarHomes(subject, listings, radius) {
-  const results = [];
+function findSimilarHomes(subject: any, listings: any[], radius: number, centerLat?: number, centerLng?: number) {
+  centerLat = centerLat ?? subject.latitude;
+  centerLng = centerLng ?? subject.longitude;
+  const results: any[] = [];
   for (const comp of listings) {
     if (!comp.latitude || !comp.longitude) continue;
-    // Skip if this listing IS the subject (coordinate check)
     const distToSubject = haversine(
       subject.latitude,
       subject.longitude,
       comp.latitude,
       comp.longitude
     );
-    if (distToSubject < 0.02) continue; // within ~100 feet = same property
+    if (distToSubject < 0.02) continue;
     if (!typeCompatible(subject.propertyType, comp.propertyType)) continue;
-    if (distToSubject > radius) continue;
+    const distToCenter = haversine(centerLat, centerLng, comp.latitude, comp.longitude);
+  
+    if (distToCenter > radius) continue;
     const score = scoreComp(subject, comp, distToSubject, radius);
     if (score === null) continue;
     results.push({ ...comp, _dist: distToSubject, _score: score });
@@ -412,9 +422,9 @@ function findSimilarHomes(subject, listings, radius) {
 }
 
 // ---------------------------------------------------------------------------
-// SUBJECT PROPERTY CARD (highlighted, not selectable)
+// SUBJECT PROPERTY CARD
 // ---------------------------------------------------------------------------
-function SubjectCard({ subject }) {
+function SubjectCard({ subject }: { subject: any }) {
   const [expanded, setExpanded] = useState(false);
   const addr = buildAddress(subject),
     url = buildListingUrl(subject);
@@ -576,7 +586,19 @@ function SubjectCard({ subject }) {
 // ---------------------------------------------------------------------------
 // COMP CARD
 // ---------------------------------------------------------------------------
-function CompCard({ comp, subject, index, isSelected, onToggleSelect }) {
+function CompCard({
+  comp,
+  subject,
+  index,
+  isSelected,
+  onToggleSelect,
+}: {
+  comp: any;
+  subject: any;
+  index: number;
+  isSelected: boolean;
+  onToggleSelect: (i: number) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const { label, color } = scoreLabel(comp._score);
   const addr = buildAddress(comp),
@@ -681,7 +703,6 @@ function CompCard({ comp, subject, index, isSelected, onToggleSelect }) {
             >
               {comp._dist.toFixed(1)} mi
             </span>
-
             <span
               style={{ color: '#64748b', fontSize: 16, userSelect: 'none' }}
             >
@@ -714,7 +735,7 @@ function CompCard({ comp, subject, index, isSelected, onToggleSelect }) {
               <span
                 key={i}
                 style={{
-                  background: '#0a0a0a',
+                  background: '#ffffff',
                   color: '#94a3b8',
                   padding: '3px 10px',
                   borderRadius: 8,
@@ -869,7 +890,7 @@ function CompCard({ comp, subject, index, isSelected, onToggleSelect }) {
 // ---------------------------------------------------------------------------
 // AUTH FORMS
 // ---------------------------------------------------------------------------
-function AuthScreen({ onLogin }) {
+function AuthScreen({ onLogin }: { onLogin: (user: any) => void }) {
   const [mode, setMode] = useState('login');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -878,7 +899,7 @@ function AuthScreen({ onLogin }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  async function handleRegister(e) {
+  async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
     if (!fullName.trim() || !email.trim() || !password.trim()) {
       setError('All fields are required.');
@@ -913,13 +934,13 @@ function AuthScreen({ onLogin }) {
       setMode('login');
       setFullName('');
       setPassword('');
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message || 'Registration failed.');
     }
     setLoading(false);
   }
 
-  async function handleLogin(e) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim() || !password.trim()) {
       setError('Email and password are required.');
@@ -934,7 +955,7 @@ function AuthScreen({ onLogin }) {
       });
       const data =
         loginResults && loginResults.length > 0
-          ? loginResults.find((u) => u.password_hash === pwHash) || null
+          ? loginResults.find((u: any) => u.password_hash === pwHash) || null
           : null;
       if (!data) {
         setError('Invalid email or password.');
@@ -949,7 +970,7 @@ function AuthScreen({ onLogin }) {
     setLoading(false);
   }
 
-  const inp = {
+  const inp: React.CSSProperties = {
     width: '100%',
     padding: '11px 14px',
     background: '#1e1e1e',
@@ -960,7 +981,7 @@ function AuthScreen({ onLogin }) {
     outline: 'none',
     boxSizing: 'border-box',
   };
-  const lbl = {
+  const lbl: React.CSSProperties = {
     display: 'block',
     fontSize: 11,
     fontWeight: 700,
@@ -1157,8 +1178,8 @@ function AuthScreen({ onLogin }) {
 // ---------------------------------------------------------------------------
 // AGENT DASHBOARD
 // ---------------------------------------------------------------------------
-function Dashboard({ user, onBack }) {
-  const [logs, setLogs] = useState([]);
+function Dashboard({ user, onBack }: { user: any; onBack: () => void }) {
+  const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -1356,21 +1377,20 @@ function Dashboard({ user, onBack }) {
 // MAIN APP
 // ---------------------------------------------------------------------------
 export default function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<any>(null);
   const [view, setView] = useState('search');
   const [query, setQuery] = useState('');
   const [altLocation, setAltLocation] = useState('');
   const [radius, setRadius] = useState(DEFAULT_RADIUS);
-  const listingMode = 'sale'; // Rental mode removed — RentCast rental data incomplete
-  const [subject, setSubject] = useState(null);
-  const [comps, setComps] = useState([]);
-  const [selected, setSelected] = useState(new Set());
+  const [subject, setSubject] = useState<any>(null);
+  const [comps, setComps] = useState<any[]>([]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
   const [error, setError] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | false>(false);
 
-  async function refreshUser(userId) {
+  async function refreshUser(userId: any) {
     const { data: userData } = await sbSelect(
       'users',
       '*',
@@ -1381,7 +1401,7 @@ export default function App() {
     return userData;
   }
 
-  function handleLogin(userData) {
+  function handleLogin(userData: any) {
     setUser(userData);
     setView('search');
   }
@@ -1393,7 +1413,7 @@ export default function App() {
     setSelected(new Set());
   }
 
-  async function handleSearch(e) {
+  async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
     const searchAddress = query.trim();
@@ -1424,7 +1444,6 @@ export default function App() {
       setLoadingMsg('Fetching property value…');
       let displayPrice, displayPriceLabel;
 
-      // Try actual listing price first, then AVM, then fallbacks
       const listingPrice = await fetchSubjectListingPrice(searchAddress);
       apiCallsUsed++;
       if (listingPrice) {
@@ -1444,7 +1463,6 @@ export default function App() {
           displayPriceLabel = 'Est. Value';
         }
       }
-      // Apply manual price override if set
       if (SUBJECT_PRICE_OVERRIDE) {
         displayPrice = SUBJECT_PRICE_OVERRIDE;
         displayPriceLabel = 'List Price';
@@ -1471,10 +1489,7 @@ export default function App() {
       const listings = await fetchActiveListings(searchLat, searchLng, radius);
       apiCallsUsed += 2;
 
-      // Find subject in listings pool by coordinates to get real list price.
-      // Also do a direct address lookup without propertyType filter as backup,
-      // in case RentCast classifies the subject under a different property type.
-      let subjectFoundInListings = listings.find((p) => {
+      let subjectFoundInListings = listings.find((p: any) => {
         if (!p.latitude || !p.longitude) return false;
         const dist = haversine(
           subjectProp.latitude,
@@ -1485,7 +1500,6 @@ export default function App() {
         return dist < 0.02;
       });
       if (!subjectFoundInListings) {
-        // Fallback: direct lookup without propertyType filter
         try {
           const fallbackRes = await fetch(
             `https://api.rentcast.io/v1/listings/sale?address=${encodeURIComponent(
@@ -1521,7 +1535,7 @@ export default function App() {
         setSubject(subjectProp);
       }
 
-      const ranked = findSimilarHomes(subjectProp, listings, radius);
+      const ranked = findSimilarHomes(subjectProp, listings, radius, searchLat, searchLng);
       setComps(ranked);
 
       await sbInsert('search_logs', {
@@ -1539,14 +1553,14 @@ export default function App() {
 
       if (ranked.length === 0)
         setError('No similar active listings found. Try a larger radius.');
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message || 'Something went wrong. Please try again.');
     }
     setLoading(false);
     setLoadingMsg('');
   }
 
-  function toggleSelect(id) {
+  function toggleSelect(id: number) {
     setSelected((prev) => {
       const n = new Set(prev);
       n.has(id) ? n.delete(id) : n.add(id);
@@ -1596,7 +1610,7 @@ export default function App() {
       subject
     )}">${query.trim()}</a> that I thought you'd find interesting:</p><ul>${items}</ul><p>Would you like to tour any of these? Let me know and I'll set it up!</p>`;
   }
-  function copyMessage(asHtml) {
+  function copyMessage(asHtml: boolean) {
     if (asHtml) {
       const html = buildClientMessageHTML(),
         text = buildClientMessageText();
@@ -1630,7 +1644,6 @@ export default function App() {
   if (view === 'dashboard')
     return <Dashboard user={user} onBack={() => setView('search')} />;
 
-  const subjectAddress = subject ? buildAddress(subject) : '';
   const limitReached = user.search_count >= user.search_limit;
 
   return (
@@ -1966,7 +1979,6 @@ export default function App() {
             <p style={{ margin: '0 0 14px', color: '#333333', fontSize: 12 }}>
               Tap a card to expand details · Tap address to view listing
             </p>
-            {/* Subject property as highlighted card - always first, not selectable */}
             {subject && <SubjectCard subject={subject} />}
             {comps.map((comp, i) => (
               <CompCard
