@@ -1,14 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
-class ErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { error: string | null }
-> {
-  constructor(props: { children: React.ReactNode }) {
+class ErrorBoundary extends React.Component {
+  constructor(props) {
     super(props);
     this.state = { error: null };
   }
-  componentDidCatch(error: Error) {
+  componentDidCatch(error) {
     this.setState({ error: error.message + '\n' + error.stack });
   }
   render() {
@@ -26,7 +23,7 @@ class ErrorBoundary extends React.Component<
             height: '100vh',
           }}
         >
-\          <strong>CRASH — copy this and share it:</strong>\n\n{this.state.error}
+          <strong>CRASH — copy this and share it:</strong>{'\n\n'}{this.state.error}
         </div>
       );
     return this.props.children;
@@ -34,12 +31,17 @@ class ErrorBoundary extends React.Component<
 }
 
 const RENTCAST_KEY = '3e3426c07ce44160b258e3862f8fcdd7';
-const SUBJECT_PRICE_OVERRIDE = 1299888; // Manual override from Onyx Homes
+const SUBJECT_PRICE_OVERRIDE = 0; // Set to a number to manually override price, 0 = disabled
 const SUPABASE_URL = 'https://iuuhvostbnybioegwmvl.supabase.co';
 const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1dWh2b3N0Ym55YmlvZWd3bXZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NzM0MjgsImV4cCI6MjA4OTI0OTQyOH0.KG0HBqHza2eVaLWgw2uIoAEeTLlqDbyIM7Sm-OM4htk';
-// Helper wrappers that match Supabase client API
-async function sbSelect(table: string, cols: string, filters?: Record<string, any>, single = false) {
+
+const RENTCAST_HEADERS = { 'X-Api-Key': RENTCAST_KEY };
+
+// ---------------------------------------------------------------------------
+// SUPABASE HELPERS
+// ---------------------------------------------------------------------------
+async function sbSelect(table, cols, filters?, single = false) {
   const params = new URLSearchParams({ select: cols });
   if (filters)
     Object.entries(filters).forEach(([k, v]) => params.set(k, 'eq.' + v));
@@ -57,7 +59,8 @@ async function sbSelect(table: string, cols: string, filters?: Record<string, an
     error: null,
   };
 }
-async function sbInsert(table: string, row: Record<string, any>) {
+
+async function sbInsert(table, row) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: 'POST',
     headers: {
@@ -74,7 +77,8 @@ async function sbInsert(table: string, row: Record<string, any>) {
     error: r.ok ? null : d,
   };
 }
-async function sbUpdate(table: string, row: Record<string, any>, col: string, val: any) {
+
+async function sbUpdate(table, row, col, val) {
   const r = await fetch(
     `${SUPABASE_URL}/rest/v1/${table}?${col}=eq.${encodeURIComponent(val)}`,
     {
@@ -89,14 +93,15 @@ async function sbUpdate(table: string, row: Record<string, any>, col: string, va
   );
   return { error: r.ok ? null : await r.json() };
 }
+
 async function sbSelectOrdered(
-  table: string,
-  cols: string,
-  filterCol: string,
-  filterVal: any,
-  orderCol: string,
-  ascending: boolean,
-  limit: number
+  table,
+  cols,
+  filterCol,
+  filterVal,
+  orderCol,
+  ascending,
+  limit
 ) {
   const dir = ascending ? 'asc' : 'desc';
   const r = await fetch(
@@ -117,15 +122,17 @@ async function sbSelectOrdered(
 // ---------------------------------------------------------------------------
 // HELPERS
 // ---------------------------------------------------------------------------
-function fmt$(v: any) {
+function fmt$(v) {
   if (!v && v !== 0) return 'N/A';
   return '$' + Number(v).toLocaleString();
 }
-function fmtNum(v: any) {
+
+function fmtNum(v) {
   if (!v && v !== 0) return 'N/A';
   return Number(v).toLocaleString();
 }
-function haversine(lat1: number, lon1: number, lat2: number, lon2: number) {
+
+function haversine(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
@@ -136,40 +143,28 @@ function haversine(lat1: number, lon1: number, lat2: number, lon2: number) {
       Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
-function normAddr(s: string) {
+
+function normAddr(s) {
   return s
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 }
-function buildListingUrl(comp: any) {
+
+function buildListingUrl(comp) {
   if (!comp)
     return 'https://www.onyxhomes.com/property-search/results/?searchtype=3&searchid=3458534';
   try {
-    const street =
-      comp.addressLine1 ||
-      comp.address ||
-      comp.streetAddress ||
-      comp.street ||
-      '';
+    const street = comp.addressLine1 || comp.address || comp.streetAddress || comp.street || '';
     const city = comp.city || '';
     const state = comp.state || '';
     const zip = comp.zipCode || comp.zip || comp.postalCode || '';
-    const mls =
-      comp.listingId || comp.mlsId || comp.mls || comp.mlsNumber || '';
-    const slugParts = [street, city, state, zip]
-      .map((p) => normAddr(p))
-      .filter(Boolean);
+    const mls = comp.listingId || comp.mlsId || comp.mls || comp.mlsNumber || '';
+    const slugParts = [street, city, state, zip].map((p) => normAddr(p)).filter(Boolean);
     const slug = slugParts.join('-');
     if (mls && slug) {
-      return (
-        'https://www.onyxhomes.com/property-search/detail/10/' +
-        mls +
-        '/' +
-        slug +
-        '/'
-      );
+      return 'https://www.onyxhomes.com/property-search/detail/10/' + mls + '/' + slug + '/';
     }
     if (slug) {
       return (
@@ -182,63 +177,71 @@ function buildListingUrl(comp: any) {
     return 'https://www.onyxhomes.com/property-search/results/?searchtype=3&searchid=3458534';
   }
 }
-function typeCompatible(a: string, b: string) {
+
+function typeCompatible(a, b) {
   const t = ['condo', 'condominium', 'townhouse', 'townhome'];
-  const aL = (a || '').toLowerCase(),
-    bL = (b || '').toLowerCase();
+  const aL = (a || '').toLowerCase();
+  const bL = (b || '').toLowerCase();
   return (
     (t.some((x) => aL.includes(x)) && t.some((x) => bL.includes(x))) ||
     aL === bL
   );
 }
-async function hashPassword(pw: string) {
-  const buf = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(pw)
-  );
+
+async function hashPassword(pw) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
   return Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 }
 
+function buildAddress(prop) {
+  return [prop.addressLine1, prop.city, prop.state, prop.zipCode]
+    .filter(Boolean)
+    .join(', ');
+}
+
 // ---------------------------------------------------------------------------
 // SCORING
 // ---------------------------------------------------------------------------
-function scoreComp(subject: any, comp: any, distMiles: number, maxRadius: number) {
+function scoreComp(subject, comp, distMiles, maxRadius) {
   let d = 0;
   const bedDiff = Math.abs((comp.bedrooms || 0) - (subject.bedrooms || 0));
   if (bedDiff > 2) return null;
   if (bedDiff === 1) d += 15;
   else if (bedDiff === 2) d += 28;
-  const sp = subject._displayPrice,
-    cp = comp.price || comp.listPrice;
+
+  const sp = subject._displayPrice;
+  const cp = comp.price || comp.listPrice;
   if (sp && cp) d += Math.min(30, (Math.abs(cp - sp) / sp) * 60);
   else d += 15;
+
   if (subject.squareFootage && comp.squareFootage)
     d += Math.min(
       20,
-      (Math.abs(comp.squareFootage - subject.squareFootage) /
-        subject.squareFootage) *
-        40
+      (Math.abs(comp.squareFootage - subject.squareFootage) / subject.squareFootage) * 40
     );
   else d += 10;
+
   d += Math.min(distMiles / maxRadius, 1) * 10;
   return Math.max(0, Math.round(100 - d));
 }
-function scoreLabel(score: number) {
+
+function scoreLabel(score) {
   if (score >= 85) return { label: 'Very Strong', color: '#c8a96e' };
   if (score >= 70) return { label: 'Strong', color: '#84cc16' };
   if (score >= 55) return { label: 'Good', color: '#eab308' };
   if (score >= 40) return { label: 'Fair', color: '#f97316' };
   return { label: 'Loose', color: '#ef4444' };
 }
-function keyDiffs(subject: any, comp: any) {
-  const diffs: string[] = [];
-  const sp = subject._displayPrice,
-    cp = comp.price || comp.listPrice;
+
+function keyDiffs(subject, comp) {
+  const diffs = [];
+  const sp = subject._displayPrice;
+  const cp = comp.price || comp.listPrice;
   if (sp && cp) {
-    const diff = cp - sp,
-      pct = ((diff / sp) * 100).toFixed(0);
+    const diff = cp - sp;
+    const pct = ((diff / sp) * 100).toFixed(0);
     diffs.push(
       Math.abs(Number(pct)) < 3
         ? 'Similar price'
@@ -246,28 +249,28 @@ function keyDiffs(subject: any, comp: any) {
     );
   }
   if (subject.squareFootage && comp.squareFootage) {
-    const diff = comp.squareFootage - subject.squareFootage,
-      pct = ((Math.abs(diff) / subject.squareFootage) * 100).toFixed(0);
+    const diff = comp.squareFootage - subject.squareFootage;
+    const pct = ((Math.abs(diff) / subject.squareFootage) * 100).toFixed(0);
     diffs.push(
       Math.abs(Number(pct)) < 4
         ? 'Similar size'
-        : `${diff > 0 ? '+' : ''}${fmtNum(diff)} sqft (${pct}% ${
-            diff > 0 ? 'larger' : 'smaller'
-          })`
+        : `${diff > 0 ? '+' : ''}${fmtNum(diff)} sqft (${pct}% ${diff > 0 ? 'larger' : 'smaller'})`
     );
   }
   return diffs.slice(0, 2);
 }
-function talkingPoints(subject: any, comp: any) {
-  const pts: string[] = [],
-    bedDiff = Math.abs((comp.bedrooms || 0) - (subject.bedrooms || 0));
+
+function talkingPoints(subject, comp) {
+  const pts = [];
+  const bedDiff = Math.abs((comp.bedrooms || 0) - (subject.bedrooms || 0));
   if (bedDiff === 0) pts.push(`Same bedroom count (${comp.bedrooms} bed)`);
   else pts.push(`${comp.bedrooms} bed vs ${subject.bedrooms} bed`);
-  const sp = subject._displayPrice,
-    cp = comp.price || comp.listPrice;
+
+  const sp = subject._displayPrice;
+  const cp = comp.price || comp.listPrice;
   if (sp && cp) {
-    const diff = cp - sp,
-      pct = ((diff / sp) * 100).toFixed(1);
+    const diff = cp - sp;
+    const pct = ((diff / sp) * 100).toFixed(1);
     pts.push(
       Math.abs(diff) < 10000
         ? 'Nearly identical price'
@@ -275,8 +278,8 @@ function talkingPoints(subject: any, comp: any) {
     );
   }
   if (subject.squareFootage && comp.squareFootage) {
-    const diff = comp.squareFootage - subject.squareFootage,
-      pct = ((Math.abs(diff) / subject.squareFootage) * 100).toFixed(0);
+    const diff = comp.squareFootage - subject.squareFootage;
+    const pct = ((Math.abs(diff) / subject.squareFootage) * 100).toFixed(0);
     pts.push(
       Math.abs(Number(pct)) < 5
         ? 'Very similar sqft'
@@ -285,17 +288,18 @@ function talkingPoints(subject: any, comp: any) {
   }
   return pts;
 }
-function shortAnalysis(subject: any, comp: any, score: number) {
-  const { label } = scoreLabel(score),
-    bedMatch = (comp.bedrooms || 0) === (subject.bedrooms || 0);
-  const sp = subject._displayPrice,
-    cp = comp.price || comp.listPrice;
-  const pDiff = sp && cp ? Math.abs(cp - sp) / sp : null,
-    sDiff =
-      subject.squareFootage && comp.squareFootage
-        ? Math.abs(comp.squareFootage - subject.squareFootage) /
-          subject.squareFootage
-        : null;
+
+function shortAnalysis(subject, comp, score) {
+  const { label } = scoreLabel(score);
+  const bedMatch = (comp.bedrooms || 0) === (subject.bedrooms || 0);
+  const sp = subject._displayPrice;
+  const cp = comp.price || comp.listPrice;
+  const pDiff = sp && cp ? Math.abs(cp - sp) / sp : null;
+  const sDiff =
+    subject.squareFootage && comp.squareFootage
+      ? Math.abs(comp.squareFootage - subject.squareFootage) / subject.squareFootage
+      : null;
+
   let t = `${label} comparable. `;
   t += bedMatch ? 'Matches on bedroom count. ' : 'Different bedroom count. ';
   if (pDiff !== null)
@@ -309,46 +313,43 @@ function shortAnalysis(subject: any, comp: any, score: number) {
     t += sDiff < 0.1 ? 'Size well-matched.' : 'Note size difference.';
   return t;
 }
-function buildAddress(prop: any) {
-  return [prop.addressLine1, prop.city, prop.state, prop.zipCode]
-    .filter(Boolean)
-    .join(', ');
-}
 
 // ---------------------------------------------------------------------------
 // API CALLS
 // ---------------------------------------------------------------------------
-const RADIUS_OPTIONS = [3, 5, 10, 15, 25],
-  DEFAULT_RADIUS = 10;
-  async function fetchSubjectProperty(address: string) {
-    const res = await fetch(
-      `https://api.rentcast.io/v1/properties?address=${encodeURIComponent(address)}&limit=1`,
-      { headers: { 'X-Api-Key': RENTCAST_KEY } }
-    );
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) return data[0];
-    }
-    const geoRes = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`,
-      { headers: { 'Accept-Language': 'en' } }
-    );
-    if (!geoRes.ok) throw new Error('Location lookup failed: ' + geoRes.status);
-    const geoData = await geoRes.json();
-    if (!geoData || geoData.length === 0)
-      throw new Error('Location not found. Try a more specific city or address.');
-    return {
-      latitude: parseFloat(geoData[0].lat),
-      longitude: parseFloat(geoData[0].lon),
-    };
+const RADIUS_OPTIONS = [3, 5, 10, 15, 25];
+const DEFAULT_RADIUS = 10;
+
+async function fetchSubjectProperty(address) {
+  const res = await fetch(
+    `https://api.rentcast.io/v1/properties?address=${encodeURIComponent(address)}&limit=1`,
+    { headers: RENTCAST_HEADERS }
+  );
+  if (res.ok) {
+    const data = await res.json();
+    if (Array.isArray(data) && data.length > 0) return data[0];
   }
-async function fetchSubjectListingPrice(address: string) {
+
+  // Fallback: geocode via Nominatim
+  const geoRes = await fetch(
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`,
+    { headers: { 'Accept-Language': 'en' } }
+  );
+  if (!geoRes.ok) throw new Error('Location lookup failed: ' + geoRes.status);
+  const geoData = await geoRes.json();
+  if (!geoData || geoData.length === 0)
+    throw new Error('Location not found. Try a more specific city or address.');
+  return {
+    latitude: parseFloat(geoData[0].lat),
+    longitude: parseFloat(geoData[0].lon),
+  };
+}
+
+async function fetchSubjectListingPrice(address) {
   try {
     const res = await fetch(
-      `https://api.rentcast.io/v1/listings/sale?address=${encodeURIComponent(
-        address
-      )}&limit=1`,
-      { headers: { 'X-Api-Key': RENTCAST_KEY } }
+      `https://api.rentcast.io/v1/listings/sale?address=${encodeURIComponent(address)}&limit=1`,
+      { headers: RENTCAST_HEADERS }
     );
     if (!res.ok) return null;
     const data = await res.json();
@@ -357,13 +358,12 @@ async function fetchSubjectListingPrice(address: string) {
   } catch (_) {}
   return null;
 }
-async function fetchAVMPrice(address: string) {
+
+async function fetchAVMPrice(address) {
   try {
     const res = await fetch(
-      `https://api.rentcast.io/v1/avm/value?address=${encodeURIComponent(
-        address
-      )}`,
-      { headers: { 'X-Api-Key': RENTCAST_KEY } }
+      `https://api.rentcast.io/v1/avm/value?address=${encodeURIComponent(address)}`,
+      { headers: RENTCAST_HEADERS }
     );
     if (!res.ok) return null;
     const data = await res.json();
@@ -372,22 +372,24 @@ async function fetchAVMPrice(address: string) {
   return null;
 }
 
-async function fetchActiveListings(lat: number, lng: number, radius: number) {
+async function fetchActiveListings(lat, lng, radius) {
   const base = `https://api.rentcast.io/v1/listings/sale?latitude=${lat}&longitude=${lng}&radius=${radius}&status=Active&limit=500`;
-  const [cR, tR] = await Promise.all([
-    fetch(base + '&propertyType=Condo', {
-      headers: { 'X-Api-Key': RENTCAST_KEY },
-    }),
-    fetch(base + '&propertyType=Townhouse', {
-      headers: { 'X-Api-Key': RENTCAST_KEY },
-    }),
+
+  // FIX: was only fetching Condo + Townhouse — now includes Single Family
+  const [cR, tR, sfR] = await Promise.all([
+    fetch(base + '&propertyType=Condo', { headers: RENTCAST_HEADERS }),
+    fetch(base + '&propertyType=Townhouse', { headers: RENTCAST_HEADERS }),
+    fetch(base + '&propertyType=Single%20Family', { headers: RENTCAST_HEADERS }),
   ]);
-  const [cD, tD] = await Promise.all([
+
+  const [cD, tD, sfD] = await Promise.all([
     cR.ok ? cR.json() : [],
     tR.ok ? tR.json() : [],
+    sfR.ok ? sfR.json() : [],
   ]);
-  const all = [...(cD || []), ...(tD || [])];
-  const seen = new Set<string>();
+
+  const all = [...(cD || []), ...(tD || []), ...(sfD || [])];
+  const seen = new Set();
   return all.filter((p) => {
     const k = p.id || p.addressLine1 + p.zipCode;
     if (seen.has(k)) return false;
@@ -396,27 +398,33 @@ async function fetchActiveListings(lat: number, lng: number, radius: number) {
   });
 }
 
-function findSimilarHomes(subject: any, listings: any[], radius: number, centerLat?: number, centerLng?: number) {
+function findSimilarHomes(subject, listings, radius, centerLat, centerLng) {
   centerLat = centerLat ?? subject.latitude;
   centerLng = centerLng ?? subject.longitude;
-  const results: any[] = [];
+  const results = [];
+
   for (const comp of listings) {
     if (!comp.latitude || !comp.longitude) continue;
+
     const distToSubject = haversine(
       subject.latitude,
       subject.longitude,
       comp.latitude,
       comp.longitude
     );
-    if (distToSubject < 0.02) continue;
+    if (distToSubject < 0.02) continue; // same property
+
     if (!typeCompatible(subject.propertyType, comp.propertyType)) continue;
-    const distToCenter = haversine(centerLat, centerLng, comp.latitude, comp.longitude);
-  
-    if (distToCenter > radius) continue;
+
+    const usingAltLocation = centerLat !== subject.latitude || centerLng !== subject.longitude;
+    const distToCenter = haversine(centerLat!, centerLng!, comp.latitude, comp.longitude);
+    if (!usingAltLocation && distToCenter > radius) continue;
+
     const score = scoreComp(subject, comp, distToSubject, radius);
     if (score === null) continue;
     results.push({ ...comp, _dist: distToSubject, _score: score });
   }
+
   results.sort((a, b) => b._score - a._score);
   return results.slice(0, 10);
 }
@@ -424,11 +432,12 @@ function findSimilarHomes(subject: any, listings: any[], radius: number, centerL
 // ---------------------------------------------------------------------------
 // SUBJECT PROPERTY CARD
 // ---------------------------------------------------------------------------
-function SubjectCard({ subject }: { subject: any }) {
+function SubjectCard({ subject }) {
   const [expanded, setExpanded] = useState(false);
-  const addr = buildAddress(subject),
-    url = buildListingUrl(subject);
+  const addr = buildAddress(subject);
+  const url = buildListingUrl(subject);
   const price = subject._displayPrice;
+
   return (
     <div
       style={{
@@ -452,14 +461,7 @@ function SubjectCard({ subject }: { subject: any }) {
             flexWrap: 'wrap',
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              minWidth: 0,
-            }}
-          >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <span
               style={{
                 background: '#c8a96e',
@@ -490,14 +492,7 @@ function SubjectCard({ subject }: { subject: any }) {
               {addr}
             </a>
           </div>
-          <span
-            style={{
-              color: '#64748b',
-              fontSize: 16,
-              userSelect: 'none',
-              flexShrink: 0,
-            }}
-          >
+          <span style={{ color: '#64748b', fontSize: 16, userSelect: 'none', flexShrink: 0 }}>
             {expanded ? '▲' : '▼'}
           </span>
         </div>
@@ -513,27 +508,16 @@ function SubjectCard({ subject }: { subject: any }) {
           {price != null ? (
             <span style={{ color: '#c8a96e', fontWeight: 800, fontSize: 17 }}>
               {fmt$(price)}
-              <span
-                style={{
-                  color: '#86efac',
-                  fontSize: 11,
-                  marginLeft: 6,
-                  fontWeight: 400,
-                }}
-              >
+              <span style={{ color: '#86efac', fontSize: 11, marginLeft: 6, fontWeight: 400 }}>
                 ({subject._displayPriceLabel})
               </span>
             </span>
           ) : (
-            <span style={{ color: '#64748b', fontSize: 14 }}>
-              Price unavailable
-            </span>
+            <span style={{ color: '#64748b', fontSize: 14 }}>Price unavailable</span>
           )}
           <span style={{ color: '#86efac', fontSize: 14 }}>
             {subject.bedrooms ?? '?'} bd · {subject.bathrooms ?? '?'} ba
-            {subject.squareFootage
-              ? ` · ${fmtNum(subject.squareFootage)} sqft`
-              : ''}
+            {subject.squareFootage ? ` · ${fmtNum(subject.squareFootage)} sqft` : ''}
           </span>
         </div>
       </div>
@@ -592,29 +576,22 @@ function CompCard({
   index,
   isSelected,
   onToggleSelect,
-}: {
-  comp: any;
-  subject: any;
-  index: number;
-  isSelected: boolean;
-  onToggleSelect: (i: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { label, color } = scoreLabel(comp._score);
-  const addr = buildAddress(comp),
-    url = buildListingUrl(comp);
-  const diffs = keyDiffs(subject, comp),
-    points = talkingPoints(subject, comp),
-    analysis = shortAnalysis(subject, comp, comp._score);
+  const addr = buildAddress(comp);
+  const url = buildListingUrl(comp);
+  const diffs = keyDiffs(subject, comp);
+  const points = talkingPoints(subject, comp);
+  const analysis = shortAnalysis(subject, comp, comp._score);
   const compPrice = comp.price || comp.listPrice;
+
   return (
     <div
       style={{
         marginBottom: 12,
         background: isSelected ? '#1a1a1a' : '#0a0a0a',
-        border: `2px solid ${
-          isSelected ? '#111111' : expanded ? '#333333' : '#1e1e1e'
-        }`,
+        border: `2px solid ${isSelected ? '#111111' : expanded ? '#333333' : '#1e1e1e'}`,
         borderRadius: 14,
         overflow: 'hidden',
       }}
@@ -632,21 +609,14 @@ function CompCard({
             flexWrap: 'wrap',
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              minWidth: 0,
-            }}
-          >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <input
               type="checkbox"
               checked={isSelected}
               onChange={() => onToggleSelect(index)}
               onClick={(e) => e.stopPropagation()}
               style={{
-                accentColor: '#222222',
+                accentColor: '#c8a96e',
                 width: 17,
                 height: 17,
                 cursor: 'pointer',
@@ -669,14 +639,7 @@ function CompCard({
               {addr}
             </a>
           </div>
-          <div
-            style={{
-              display: 'flex',
-              gap: 6,
-              alignItems: 'center',
-              flexShrink: 0,
-            }}
-          >
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
             <span
               style={{
                 background: color + '22',
@@ -703,9 +666,7 @@ function CompCard({
             >
               {comp._dist.toFixed(1)} mi
             </span>
-            <span
-              style={{ color: '#64748b', fontSize: 16, userSelect: 'none' }}
-            >
+            <span style={{ color: '#64748b', fontSize: 16, userSelect: 'none' }}>
               {expanded ? '▲' : '▼'}
             </span>
           </div>
@@ -728,19 +689,17 @@ function CompCard({
           </span>
         </div>
         {diffs.length > 0 && (
-          <div
-            style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}
-          >
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
             {diffs.map((d, i) => (
               <span
                 key={i}
                 style={{
-                  background: '#ffffff',
+                  background: '#1a1a1a',
                   color: '#94a3b8',
                   padding: '3px 10px',
                   borderRadius: 8,
                   fontSize: 12,
-                  border: '1px solid #111111',
+                  border: '1px solid #333333',
                 }}
               >
                 {d}
@@ -757,14 +716,7 @@ function CompCard({
             background: '#111111',
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 8,
-              marginBottom: 12,
-            }}
-          >
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
             {comp.propertyType && (
               <span
                 style={{
@@ -832,8 +784,7 @@ function CompCard({
                 📞 {comp.listingAgent.phone}
               </a>
             )}
-            {(comp.openHouseDate ||
-              (comp.openHouseDates && comp.openHouseDates.length > 0)) && (
+            {(comp.openHouseDate || (comp.openHouseDates && comp.openHouseDates.length > 0)) && (
               <span
                 style={{
                   background: '#1a2f1a',
@@ -847,14 +798,7 @@ function CompCard({
               </span>
             )}
           </div>
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 6,
-              marginBottom: 10,
-            }}
-          >
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
             {points.map((pt, j) => (
               <span
                 key={j}
@@ -864,21 +808,14 @@ function CompCard({
                   padding: '3px 10px',
                   borderRadius: 8,
                   fontSize: 12,
-                  border: '1px solid #111111',
+                  border: '1px solid #1e1e1e',
                 }}
               >
                 {pt}
               </span>
             ))}
           </div>
-          <p
-            style={{
-              margin: 0,
-              color: '#94a3b8',
-              fontSize: 13,
-              lineHeight: 1.6,
-            }}
-          >
+          <p style={{ margin: 0, color: '#94a3b8', fontSize: 13, lineHeight: 1.6 }}>
             {analysis}
           </p>
         </div>
@@ -888,9 +825,9 @@ function CompCard({
 }
 
 // ---------------------------------------------------------------------------
-// AUTH FORMS
+// AUTH SCREEN
 // ---------------------------------------------------------------------------
-function AuthScreen({ onLogin }: { onLogin: (user: any) => void }) {
+function AuthScreen({ onLogin }) {
   const [mode, setMode] = useState('login');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -899,7 +836,7 @@ function AuthScreen({ onLogin }: { onLogin: (user: any) => void }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  async function handleRegister(e: React.FormEvent) {
+  async function handleRegister(e) {
     e.preventDefault();
     if (!fullName.trim() || !email.trim() || !password.trim()) {
       setError('All fields are required.');
@@ -914,11 +851,10 @@ function AuthScreen({ onLogin }: { onLogin: (user: any) => void }) {
     setSuccess('');
     try {
       const pwHash = await hashPassword(password);
-      const { data: _existArr } = await sbSelect('users', 'user_id', {
+      const { data: existArr } = await sbSelect('users', 'user_id', {
         email: email.trim().toLowerCase(),
       });
-      const existing = _existArr && _existArr.length > 0 ? _existArr[0] : null;
-      if (existing) {
+      if (existArr && existArr.length > 0) {
         setError('An account with this email already exists.');
         setLoading(false);
         return;
@@ -934,13 +870,13 @@ function AuthScreen({ onLogin }: { onLogin: (user: any) => void }) {
       setMode('login');
       setFullName('');
       setPassword('');
-    } catch (err: any) {
+    } catch (err) {
       setError(err.message || 'Registration failed.');
     }
     setLoading(false);
   }
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e) {
     e.preventDefault();
     if (!email.trim() || !password.trim()) {
       setError('Email and password are required.');
@@ -955,7 +891,7 @@ function AuthScreen({ onLogin }: { onLogin: (user: any) => void }) {
       });
       const data =
         loginResults && loginResults.length > 0
-          ? loginResults.find((u: any) => u.password_hash === pwHash) || null
+          ? loginResults.find((u) => u.password_hash === pwHash) || null
           : null;
       if (!data) {
         setError('Invalid email or password.');
@@ -963,14 +899,14 @@ function AuthScreen({ onLogin }: { onLogin: (user: any) => void }) {
         return;
       }
       onLogin(data);
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error(err);
       setError('Login failed. Please try again.');
     }
     setLoading(false);
   }
 
-  const inp: React.CSSProperties = {
+  const inp = {
     width: '100%',
     padding: '11px 14px',
     background: '#1e1e1e',
@@ -981,7 +917,7 @@ function AuthScreen({ onLogin }: { onLogin: (user: any) => void }) {
     outline: 'none',
     boxSizing: 'border-box',
   };
-  const lbl: React.CSSProperties = {
+  const lbl = {
     display: 'block',
     fontSize: 11,
     fontWeight: 700,
@@ -1004,20 +940,10 @@ function AuthScreen({ onLogin }: { onLogin: (user: any) => void }) {
       }}
     >
       <div style={{ textAlign: 'center', marginBottom: 28 }}>
-        <h1
-          style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#ffffff' }}
-        >
+        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#ffffff' }}>
           ShowNext
         </h1>
-        <p
-          style={{
-            margin: '0',
-            color: '#c8a96e',
-            fontSize: 11,
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase',
-          }}
-        >
+        <p style={{ margin: '0', color: '#c8a96e', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
           for Onyx Homes
         </p>
         <p style={{ margin: '4px 0 0', color: '#888', fontSize: 13 }}>
@@ -1039,7 +965,7 @@ function AuthScreen({ onLogin }: { onLogin: (user: any) => void }) {
             display: 'flex',
             gap: 0,
             marginBottom: 22,
-            background: '#111111',
+            background: '#0a0a0a',
             borderRadius: 10,
             padding: 3,
           }}
@@ -1047,17 +973,13 @@ function AuthScreen({ onLogin }: { onLogin: (user: any) => void }) {
           {['login', 'register'].map((m) => (
             <button
               key={m}
-              onClick={() => {
-                setMode(m);
-                setError('');
-                setSuccess('');
-              }}
+              onClick={() => { setMode(m); setError(''); setSuccess(''); }}
               style={{
                 flex: 1,
                 padding: '8px',
                 border: 'none',
                 borderRadius: 8,
-                background: mode === m ? '#111111' : 'transparent',
+                background: mode === m ? '#1e1e1e' : 'transparent',
                 color: mode === m ? '#fff' : '#94a3b8',
                 fontWeight: 700,
                 fontSize: 13,
@@ -1139,9 +1061,7 @@ function AuthScreen({ onLogin }: { onLogin: (user: any) => void }) {
             style={{
               width: '100%',
               padding: '12px',
-              background: loading
-                ? '#000000'
-                : 'linear-gradient(90deg,#111111,#111111)',
+              background: loading ? '#1a1a1a' : 'linear-gradient(90deg,#c8a96e,#a07840)',
               border: 'none',
               borderRadius: 10,
               color: '#fff',
@@ -1151,23 +1071,12 @@ function AuthScreen({ onLogin }: { onLogin: (user: any) => void }) {
             }}
           >
             {loading
-              ? mode === 'login'
-                ? 'Signing in…'
-                : 'Creating account…'
-              : mode === 'login'
-              ? 'Sign In →'
-              : 'Create Free Account →'}
+              ? mode === 'login' ? 'Signing in…' : 'Creating account…'
+              : mode === 'login' ? 'Sign In →' : 'Create Free Account →'}
           </button>
         </form>
 
-        <p
-          style={{
-            textAlign: 'center',
-            marginTop: 16,
-            fontSize: 12,
-            color: '#333333',
-          }}
-        >
+        <p style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: '#333333' }}>
           Test limit: 20 searches · Track your comp searches · Free during beta
         </p>
       </div>
@@ -1176,30 +1085,24 @@ function AuthScreen({ onLogin }: { onLogin: (user: any) => void }) {
 }
 
 // ---------------------------------------------------------------------------
-// AGENT DASHBOARD
+// DASHBOARD
 // ---------------------------------------------------------------------------
-function Dashboard({ user, onBack }: { user: any; onBack: () => void }) {
-  const [logs, setLogs] = useState<any[]>([]);
+function Dashboard({ user, onBack }) {
+  const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    sbSelectOrdered(
-      'search_logs',
-      '*',
-      'user_id',
-      user.user_id,
-      'timestamp',
-      false,
-      50
-    ).then(({ data }) => {
-      setLogs(data || []);
-      setLoading(false);
-    });
+    sbSelectOrdered('search_logs', '*', 'user_id', user.user_id, 'timestamp', false, 50).then(
+      ({ data }) => {
+        setLogs(data || []);
+        setLoading(false);
+      }
+    );
   }, [user.user_id]);
 
-  const used = user.search_count,
-    limit = user.search_limit,
-    pct = Math.round((used / limit) * 100);
+  const used = user.search_count;
+  const limit = user.search_limit;
+  const pct = Math.round((used / limit) * 100);
 
   return (
     <div
@@ -1220,14 +1123,7 @@ function Dashboard({ user, onBack }: { user: any; onBack: () => void }) {
         }}
       >
         <div>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 22,
-              fontWeight: 800,
-              color: '#ffffff',
-            }}
-          >
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#ffffff' }}>
             My Dashboard
           </h1>
           <p style={{ margin: '3px 0 0', color: '#c8a96e', fontSize: 13 }}>
@@ -1239,7 +1135,7 @@ function Dashboard({ user, onBack }: { user: any; onBack: () => void }) {
           style={{
             padding: '8px 16px',
             background: '#000000',
-            border: '1px solid #111111',
+            border: '1px solid #333333',
             borderRadius: 8,
             color: '#ffffff',
             fontSize: 13,
@@ -1269,27 +1165,12 @@ function Dashboard({ user, onBack }: { user: any; onBack: () => void }) {
               marginBottom: 12,
             }}
           >
-            <span style={{ fontWeight: 700, fontSize: 16, color: '#e2e8f0' }}>
-              Searches Used
-            </span>
-            <span
-              style={{
-                fontWeight: 800,
-                fontSize: 20,
-                color: used >= limit ? '#ef4444' : '#ffffff',
-              }}
-            >
+            <span style={{ fontWeight: 700, fontSize: 16, color: '#e2e8f0' }}>Searches Used</span>
+            <span style={{ fontWeight: 800, fontSize: 20, color: used >= limit ? '#ef4444' : '#c8a96e' }}>
               {used} / {limit}
             </span>
           </div>
-          <div
-            style={{
-              background: '#1e1e1e',
-              borderRadius: 99,
-              height: 10,
-              overflow: 'hidden',
-            }}
-          >
+          <div style={{ background: '#1e1e1e', borderRadius: 99, height: 10, overflow: 'hidden' }}>
             <div
               style={{
                 height: '100%',
@@ -1297,7 +1178,7 @@ function Dashboard({ user, onBack }: { user: any; onBack: () => void }) {
                 background:
                   used >= limit
                     ? 'linear-gradient(90deg,#dc2626,#ef4444)'
-                    : 'linear-gradient(90deg,#111111,#111111)',
+                    : 'linear-gradient(90deg,#c8a96e,#a07840)',
                 borderRadius: 99,
                 transition: 'width .4s',
               }}
@@ -1308,21 +1189,12 @@ function Dashboard({ user, onBack }: { user: any; onBack: () => void }) {
           </p>
         </div>
 
-        <h2
-          style={{
-            margin: '0 0 14px',
-            fontSize: 17,
-            fontWeight: 700,
-            color: '#ffffff',
-          }}
-        >
+        <h2 style={{ margin: '0 0 14px', fontSize: 17, fontWeight: 700, color: '#c8a96e' }}>
           Search History
         </h2>
         {loading && <p style={{ color: '#64748b', fontSize: 14 }}>Loading…</p>}
         {!loading && logs.length === 0 && (
-          <p style={{ color: '#64748b', fontSize: 14 }}>
-            No searches yet. Go find some comps!
-          </p>
+          <p style={{ color: '#64748b', fontSize: 14 }}>No searches yet. Go find some comps!</p>
         )}
         {logs.map((log, i) => (
           <div
@@ -1377,34 +1249,30 @@ function Dashboard({ user, onBack }: { user: any; onBack: () => void }) {
 // MAIN APP
 // ---------------------------------------------------------------------------
 export default function App() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState(null);
   const [view, setView] = useState('search');
   const [query, setQuery] = useState('');
   const [altLocation, setAltLocation] = useState('');
   const [radius, setRadius] = useState(DEFAULT_RADIUS);
-  const [subject, setSubject] = useState<any>(null);
-  const [comps, setComps] = useState<any[]>([]);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [subject, setSubject] = useState(null);
+  const [comps, setComps] = useState([]);
+  const [selected, setSelected] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
   const [error, setError] = useState('');
-  const [copied, setCopied] = useState<string | false>(false);
+  const [copied, setCopied] = useState(false);
 
-  async function refreshUser(userId: any) {
-    const { data: userData } = await sbSelect(
-      'users',
-      '*',
-      { user_id: userId },
-      true
-    );
+  async function refreshUser(userId) {
+    const { data: userData } = await sbSelect('users', '*', { user_id: userId }, true);
     if (userData) setUser(userData);
     return userData;
   }
 
-  function handleLogin(userData: any) {
+  function handleLogin(userData) {
     setUser(userData);
     setView('search');
   }
+
   function handleLogout() {
     setUser(null);
     setView('search');
@@ -1413,7 +1281,7 @@ export default function App() {
     setSelected(new Set());
   }
 
-  async function handleSearch(e: React.FormEvent) {
+  async function handleSearch(e) {
     e.preventDefault();
     if (!user) return;
     const searchAddress = query.trim();
@@ -1421,11 +1289,7 @@ export default function App() {
 
     const freshUser = await refreshUser(user.user_id);
     if (freshUser.search_count >= freshUser.search_limit) {
-      setError(
-        'Test limit reached. You have used your ' +
-          freshUser.search_limit +
-          ' searches.'
-      );
+      setError('Test limit reached. You have used your ' + freshUser.search_limit + ' searches.');
       return;
     }
 
@@ -1463,6 +1327,8 @@ export default function App() {
           displayPriceLabel = 'Est. Value';
         }
       }
+
+      // Only apply override if explicitly set (non-zero)
       if (SUBJECT_PRICE_OVERRIDE) {
         displayPrice = SUBJECT_PRICE_OVERRIDE;
         displayPriceLabel = 'List Price';
@@ -1474,11 +1340,12 @@ export default function App() {
         _displayPriceLabel: displayPriceLabel,
       };
 
-      let searchLat = subjectProp.latitude,
-        searchLng = subjectProp.longitude;
+      let searchLat = subjectProp.latitude;
+      let searchLng = subjectProp.longitude;
       if (altLocation.trim()) {
         setLoadingMsg('Looking up search location…');
-        const altProp = await fetchSubjectProperty(altLocation.trim());
+        const cleanAlt = altLocation.trim().replace(/,?\s*CA$/i, '');
+        const altProp = await fetchSubjectProperty(cleanAlt + ', CA');
         apiCallsUsed++;
         searchLat = altProp.latitude;
         searchLng = altProp.longitude;
@@ -1487,43 +1354,32 @@ export default function App() {
       setSubject(subjectProp);
       setLoadingMsg('Searching for similar active sale listings…');
       const listings = await fetchActiveListings(searchLat, searchLng, radius);
-      apiCallsUsed += 2;
+      apiCallsUsed += 3; // now 3 property types
 
-      let subjectFoundInListings = listings.find((p: any) => {
+      // Try to find subject in listings pool by coordinates
+      let subjectFoundInListings = listings.find((p) => {
         if (!p.latitude || !p.longitude) return false;
-        const dist = haversine(
-          subjectProp.latitude,
-          subjectProp.longitude,
-          p.latitude,
-          p.longitude
-        );
-        return dist < 0.02;
+        return haversine(subjectProp.latitude, subjectProp.longitude, p.latitude, p.longitude) < 0.02;
       });
+
       if (!subjectFoundInListings) {
+        // Fallback: direct address lookup
         try {
           const fallbackRes = await fetch(
-            `https://api.rentcast.io/v1/listings/sale?address=${encodeURIComponent(
-              searchAddress
-            )}&status=Active&limit=1`,
-            { headers: { 'X-Api-Key': RENTCAST_KEY } }
+            `https://api.rentcast.io/v1/listings/sale?address=${encodeURIComponent(searchAddress)}&status=Active&limit=1`,
+            { headers: RENTCAST_HEADERS }
           );
           if (fallbackRes.ok) {
             const fallbackData = await fallbackRes.json();
-            if (
-              Array.isArray(fallbackData) &&
-              fallbackData.length > 0 &&
-              fallbackData[0].price
-            ) {
+            if (Array.isArray(fallbackData) && fallbackData.length > 0 && fallbackData[0].price) {
               subjectFoundInListings = fallbackData[0];
             }
           }
           apiCallsUsed++;
         } catch (_) {}
       }
-      if (
-        subjectFoundInListings &&
-        (subjectFoundInListings.price || subjectFoundInListings.listPrice)
-      ) {
+
+      if (subjectFoundInListings && (subjectFoundInListings.price || subjectFoundInListings.listPrice)) {
         subjectProp = {
           ...subjectProp,
           _displayPrice:
@@ -1543,36 +1399,29 @@ export default function App() {
         address_searched: searchAddress,
         api_calls_used: apiCallsUsed,
       });
-      await sbUpdate(
-        'users',
-        { search_count: freshUser.search_count + 1 },
-        'user_id',
-        user.user_id
-      );
+      await sbUpdate('users', { search_count: freshUser.search_count + 1 }, 'user_id', user.user_id);
       await refreshUser(user.user_id);
 
       if (ranked.length === 0)
         setError('No similar active listings found. Try a larger radius.');
-    } catch (err: any) {
+    } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.');
     }
+
     setLoading(false);
     setLoadingMsg('');
   }
 
-  function toggleSelect(id: number) {
+  function toggleSelect(id) {
     setSelected((prev) => {
       const n = new Set(prev);
       n.has(id) ? n.delete(id) : n.add(id);
       return n;
     });
   }
-  function selectAll() {
-    setSelected(new Set(comps.map((_, i) => i)));
-  }
-  function clearAll() {
-    setSelected(new Set());
-  }
+  function selectAll() { setSelected(new Set(comps.map((_, i) => i))); }
+  function clearAll() { setSelected(new Set()); }
+
   const selectedComps = useMemo(
     () => comps.filter((_, i) => selected.has(i)),
     [comps, selected]
@@ -1582,38 +1431,38 @@ export default function App() {
     if (!subject || selectedComps.length === 0) return '';
     const lines = selectedComps
       .map((c) => {
-        const addr = buildAddress(c),
-          price = fmt$(c.price || c.listPrice),
-          beds = c.bedrooms ?? '?',
-          baths = c.bathrooms ?? '?',
-          sqft = c.squareFootage ? fmtNum(c.squareFootage) : '?',
-          url = buildListingUrl(c);
+        const addr = buildAddress(c);
+        const price = fmt$(c.price || c.listPrice);
+        const beds = c.bedrooms ?? '?';
+        const baths = c.bathrooms ?? '?';
+        const sqft = c.squareFootage ? fmtNum(c.squareFootage) : '?';
+        const url = buildListingUrl(c);
         return `• ${addr} — ${price} | ${beds} bed / ${baths} bath | ${sqft} sqft\n  ${url}`;
       })
       .join('\n');
     return `Hi! Here are some similar homes for sale to ${query.trim()} that I thought you'd find interesting:\n\n${lines}\n\nWould you like to tour any of these? Let me know and I'll set it up!`;
   }
+
   function buildClientMessageHTML() {
     if (!subject || selectedComps.length === 0) return '';
     const items = selectedComps
       .map((c) => {
-        const addr = buildAddress(c),
-          price = fmt$(c.price || c.listPrice),
-          beds = c.bedrooms ?? '?',
-          baths = c.bathrooms ?? '?',
-          sqft = c.squareFootage ? fmtNum(c.squareFootage) : '?',
-          url = buildListingUrl(c);
+        const addr = buildAddress(c);
+        const price = fmt$(c.price || c.listPrice);
+        const beds = c.bedrooms ?? '?';
+        const baths = c.bathrooms ?? '?';
+        const sqft = c.squareFootage ? fmtNum(c.squareFootage) : '?';
+        const url = buildListingUrl(c);
         return `<li><a href="${url}">${addr}</a> — ${price} | ${beds} bed / ${baths} bath | ${sqft} sqft</li>`;
       })
       .join('');
-    return `<p>Hi! Here are some similar homes to <a href="${buildListingUrl(
-      subject
-    )}">${query.trim()}</a> that I thought you'd find interesting:</p><ul>${items}</ul><p>Would you like to tour any of these? Let me know and I'll set it up!</p>`;
+    return `<p>Hi! Here are some similar homes to <a href="${buildListingUrl(subject)}">${query.trim()}</a> that I thought you'd find interesting:</p><ul>${items}</ul><p>Would you like to tour any of these? Let me know and I'll set it up!</p>`;
   }
-  function copyMessage(asHtml: boolean) {
+
+  function copyMessage(asHtml) {
     if (asHtml) {
-      const html = buildClientMessageHTML(),
-        text = buildClientMessageText();
+      const html = buildClientMessageHTML();
+      const text = buildClientMessageText();
       if (!html) return;
       try {
         const item = new ClipboardItem({
@@ -1647,413 +1496,367 @@ export default function App() {
   const limitReached = user.search_count >= user.search_limit;
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: '#0a0a0a',
-        color: '#e2e8f0',
-        fontFamily: "'Inter', sans-serif",
-      }}
-    >
-      {/* HEADER */}
+    <ErrorBoundary>
+    
       <div
         style={{
-          background: 'linear-gradient(135deg,#1a1a1a,#000000)',
-          padding: '18px 20px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 10,
+          minHeight: '100vh',
+          background: '#0a0a0a',
+          color: '#e2e8f0',
+          fontFamily: "'Inter', sans-serif",
         }}
       >
-        <div>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 22,
-              fontWeight: 800,
-              color: '#ffffff',
-            }}
-          >
-            ShowNext
-          </h1>
-          <p
-            style={{
-              margin: '0',
-              color: '#c8a96e',
-              fontSize: 10,
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase',
-            }}
-          >
-            for Onyx Homes
-          </p>
-          <p style={{ margin: '2px 0 0', color: '#888', fontSize: 12 }}>
-            Find similar active listings in seconds
-          </p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            onClick={() => setView('dashboard')}
-            style={{
-              padding: '7px 14px',
-              background: '#000000',
-              border: '1px solid #111111',
-              borderRadius: 8,
-              color: '#ffffff',
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            📊 {user.search_count}/{user.search_limit} searches
-          </button>
-          <span style={{ color: '#c8a96e', fontSize: 13, fontWeight: 600 }}>
-            {user.full_name}
-          </span>
-          <button
-            onClick={handleLogout}
-            style={{
-              padding: '7px 12px',
-              background: '#111111',
-              border: '1px solid #333333',
-              borderRadius: 8,
-              color: '#94a3b8',
-              fontSize: 12,
-              cursor: 'pointer',
-            }}
-          >
-            Sign out
-          </button>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: 700, margin: '24px auto', padding: '0 16px' }}>
-        {limitReached && (
-          <div
-            style={{
-              background: '#450a0a',
-              border: '1px solid #991b1b',
-              borderRadius: 12,
-              padding: '16px 20px',
-              marginBottom: 18,
-              textAlign: 'center',
-            }}
-          >
-            <div
-              style={{
-                fontSize: 18,
-                fontWeight: 800,
-                color: '#fca5a5',
-                marginBottom: 4,
-              }}
-            >
-              🔒 Test limit reached
-            </div>
-            <p style={{ margin: 0, color: '#fca5a5', fontSize: 14 }}>
-              You have used your {user.search_limit} searches. Contact us to get
-              more access.
-            </p>
-          </div>
-        )}
-
-        {/* SEARCH FORM */}
-        <form
-          onSubmit={handleSearch}
+        {/* HEADER */}
+        <div
           style={{
-            background: '#111111',
-            borderRadius: 16,
-            padding: 22,
-            boxShadow: '0 4px 24px rgba(0,0,0,.4)',
-            opacity: limitReached ? 0.5 : 1,
+            background: 'linear-gradient(135deg,#1a1a1a,#000000)',
+            padding: '18px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 10,
           }}
         >
-          <label
-            style={{
-              display: 'block',
-              fontSize: 11,
-              fontWeight: 700,
-              color: '#ffffff',
-              marginBottom: 6,
-              textTransform: 'uppercase',
-              letterSpacing: 1,
-            }}
-          >
-            Subject Property Address
-          </label>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Address"
-            disabled={limitReached}
-            style={{
-              width: '100%',
-              padding: '12px 14px',
-              background: '#1e1e1e',
-              border: '1.5px solid #333333',
-              borderRadius: 10,
-              color: '#e2e8f0',
-              fontSize: 15,
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
-          />
-          <label
-            style={{
-              display: 'block',
-              fontSize: 11,
-              fontWeight: 700,
-              color: '#94a3b8',
-              marginTop: 14,
-              marginBottom: 6,
-              textTransform: 'uppercase',
-              letterSpacing: 1,
-            }}
-          >
-            Search Comps in Different Location{' '}
-            <span
+          <div>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#ffffff' }}>
+              ShowNext
+            </h1>
+            <p style={{ margin: '0', color: '#c8a96e', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+              for Onyx Homes
+            </p>
+            <p style={{ margin: '2px 0 0', color: '#888', fontSize: 12 }}>
+              Find similar active listings in seconds
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              onClick={() => setView('dashboard')}
               style={{
-                color: '#64748b',
-                fontWeight: 400,
-                textTransform: 'none',
+                padding: '7px 14px',
+                background: '#000000',
+                border: '1px solid #333333',
+                borderRadius: 8,
+                color: '#ffffff',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
               }}
             >
-              (optional)
+              📊 {user.search_count}/{user.search_limit} searches
+            </button>
+            <span style={{ color: '#c8a96e', fontSize: 13, fontWeight: 600 }}>
+              {user.full_name}
             </span>
-          </label>
-          <input
-            value={altLocation}
-            onChange={(e) => setAltLocation(e.target.value)}
-            placeholder="City, State  or  full address"
-            disabled={limitReached}
-            style={{
-              width: '100%',
-              padding: '11px 14px',
-              background: '#1e1e1e',
-              border: '1.5px solid #333333',
-              borderRadius: 10,
-              color: '#e2e8f0',
-              fontSize: 14,
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
-          />
-          <p style={{ margin: '5px 0 0', color: '#64748b', fontSize: 11 }}>
-            Leave blank to search near the subject property
-          </p>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: '7px 12px',
+                background: '#111111',
+                border: '1px solid #333333',
+                borderRadius: 8,
+                color: '#94a3b8',
+                fontSize: 12,
+                cursor: 'pointer',
+              }}
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
 
-          <div style={{ marginTop: 14 }}>
+        <div style={{ maxWidth: 700, margin: '24px auto', padding: '0 16px' }}>
+          {limitReached && (
+            <div
+              style={{
+                background: '#450a0a',
+                border: '1px solid #991b1b',
+                borderRadius: 12,
+                padding: '16px 20px',
+                marginBottom: 18,
+                textAlign: 'center',
+              }}
+            >
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#fca5a5', marginBottom: 4 }}>
+                🔒 Test limit reached
+              </div>
+              <p style={{ margin: 0, color: '#fca5a5', fontSize: 14 }}>
+                You have used your {user.search_limit} searches. Contact us to get more access.
+              </p>
+            </div>
+          )}
+
+          {/* SEARCH FORM */}
+          <form
+            onSubmit={handleSearch}
+            style={{
+              background: '#111111',
+              borderRadius: 16,
+              padding: 22,
+              boxShadow: '0 4px 24px rgba(0,0,0,.4)',
+              opacity: limitReached ? 0.5 : 1,
+            }}
+          >
+            <label
+              style={{
+                display: 'block',
+                fontSize: 11,
+                fontWeight: 700,
+                color: '#ffffff',
+                marginBottom: 6,
+                textTransform: 'uppercase',
+                letterSpacing: 1,
+              }}
+            >
+              Subject Property Address
+            </label>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Address"
+              disabled={limitReached}
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                background: '#1e1e1e',
+                border: '1.5px solid #333333',
+                borderRadius: 10,
+                color: '#e2e8f0',
+                fontSize: 15,
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
             <label
               style={{
                 display: 'block',
                 fontSize: 11,
                 fontWeight: 700,
                 color: '#94a3b8',
-                marginBottom: 7,
+                marginTop: 14,
+                marginBottom: 6,
                 textTransform: 'uppercase',
                 letterSpacing: 1,
               }}
             >
-              Search Radius
+              Search Comps in Different Location{' '}
+              <span style={{ color: '#64748b', fontWeight: 400, textTransform: 'none' }}>
+                (optional)
+              </span>
             </label>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {RADIUS_OPTIONS.map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRadius(r)}
-                  disabled={limitReached}
-                  style={{
-                    padding: '7px 16px',
-                    background: radius === r ? '#111111' : '#1e1e1e',
-                    border:
-                      radius === r ? '2px solid #c8a96e' : '2px solid #333333',
-                    borderRadius: 8,
-                    color: radius === r ? '#fff' : '#94a3b8',
-                    fontSize: 13,
-                    fontWeight: radius === r ? 700 : 400,
-                    cursor: limitReached ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {r} mi
-                </button>
-              ))}
-            </div>
-          </div>
-          <button
-            type="submit"
-            disabled={loading || !query.trim() || limitReached}
-            style={{
-              marginTop: 18,
-              width: '100%',
-              padding: '13px',
-              background: loading
-                ? '#000000'
-                : limitReached
-                ? '#111111'
-                : 'linear-gradient(90deg,#111111,#111111)',
-              border: limitReached ? '1px solid #333333' : 'none',
-              borderRadius: 10,
-              color: limitReached ? '#64748b' : '#fff',
-              fontSize: 16,
-              fontWeight: 700,
-              cursor: loading || limitReached ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {loading
-              ? loadingMsg || 'Searching…'
-              : limitReached
-              ? '🔒 Limit Reached'
-              : '🔍  Find Similar Homes'}
-          </button>
-        </form>
-
-        {error && !limitReached && (
-          <div
-            style={{
-              marginTop: 14,
-              background: '#450a0a',
-              border: '1px solid #991b1b',
-              borderRadius: 10,
-              padding: '13px 16px',
-              color: '#fca5a5',
-              fontSize: 14,
-            }}
-          >
-            ⚠️ {error}
-          </div>
-        )}
-
-        {comps.length > 0 && !loading && (
-          <div style={{ marginTop: 22 }}>
-            <div
+            <input
+              value={altLocation}
+              onChange={(e) => setAltLocation(e.target.value)}
+              placeholder="City, State  or  full address"
+              disabled={limitReached}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: 12,
+                width: '100%',
+                padding: '11px 14px',
+                background: '#1e1e1e',
+                border: '1.5px solid #333333',
+                borderRadius: 10,
+                color: '#e2e8f0',
+                fontSize: 14,
+                outline: 'none',
+                boxSizing: 'border-box',
               }}
-            >
-              <h2
+            />
+            <p style={{ margin: '5px 0 0', color: '#64748b', fontSize: 11 }}>
+              Leave blank to search near the subject property
+            </p>
+
+            <div style={{ marginTop: 14 }}>
+              <label
                 style={{
-                  margin: 0,
-                  fontSize: 17,
+                  display: 'block',
+                  fontSize: 11,
                   fontWeight: 700,
-                  color: '#ffffff',
+                  color: '#94a3b8',
+                  marginBottom: 7,
+                  textTransform: 'uppercase',
+                  letterSpacing: 1,
                 }}
               >
-                {comps.length} Similar Active Listings
-              </h2>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={selectAll}
-                  style={{
-                    padding: '5px 12px',
-                    background: '#000000',
-                    border: '1px solid #111111',
-                    borderRadius: 8,
-                    color: '#ffffff',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Select All
-                </button>
-                <button
-                  onClick={clearAll}
-                  style={{
-                    padding: '5px 12px',
-                    background: '#111111',
-                    border: '1px solid #333333',
-                    borderRadius: 8,
-                    color: '#94a3b8',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Clear
-                </button>
+                Search Radius
+              </label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {RADIUS_OPTIONS.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRadius(r)}
+                    disabled={limitReached}
+                    style={{
+                      padding: '7px 16px',
+                      background: radius === r ? '#1e1e1e' : '#0a0a0a',
+                      border: radius === r ? '2px solid #c8a96e' : '2px solid #333333',
+                      borderRadius: 8,
+                      color: radius === r ? '#c8a96e' : '#94a3b8',
+                      fontSize: 13,
+                      fontWeight: radius === r ? 700 : 400,
+                      cursor: limitReached ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {r} mi
+                  </button>
+                ))}
               </div>
             </div>
-            <p style={{ margin: '0 0 14px', color: '#333333', fontSize: 12 }}>
-              Tap a card to expand details · Tap address to view listing
-            </p>
-            {subject && <SubjectCard subject={subject} />}
-            {comps.map((comp, i) => (
-              <CompCard
-                key={i}
-                comp={comp}
-                subject={subject}
-                index={i}
-                isSelected={selected.has(i)}
-                onToggleSelect={toggleSelect}
-              />
-            ))}
-          </div>
-        )}
-
-        {!subject && !loading && (
-          <div
-            style={{
-              marginTop: 32,
-              textAlign: 'center',
-              color: '#333333',
-              fontSize: 13,
-            }}
-          >
-            <p>Enter an address to find similar active listings</p>
-            <p style={{ marginTop: 4 }}>
-              Powered by Rentcast · Data updates daily
-            </p>
-          </div>
-        )}
-        <div style={{ height: 120 }} />
-      </div>
-
-      {selected.size > 0 && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            background: 'linear-gradient(90deg,#1a1a1a,#000000)',
-            borderTop: '1px solid #111111',
-            padding: '13px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            zIndex: 100,
-            boxShadow: '0 -4px 20px rgba(0,0,0,.5)',
-          }}
-        >
-          <span style={{ color: '#c8a96e', fontWeight: 600, fontSize: 14 }}>
-            {selected.size} propert{selected.size === 1 ? 'y' : 'ies'} selected
-          </span>
-          <div style={{ display: 'flex', gap: 10 }}>
             <button
-              onClick={() => copyMessage(true)}
+              type="submit"
+              disabled={loading || !query.trim() || limitReached}
               style={{
-                padding: '9px 16px',
-                background:
-                  copied === 'html'
-                    ? '#c8a96e'
-                    : 'linear-gradient(90deg,#222222,#111111)',
-                border: 'none',
+                marginTop: 18,
+                width: '100%',
+                padding: '13px',
+                background: loading
+                  ? '#1a1a1a'
+                  : limitReached
+                  ? '#111111'
+                  : 'linear-gradient(90deg,#c8a96e,#a07840)',
+                border: limitReached ? '1px solid #333333' : 'none',
                 borderRadius: 10,
-                color: '#fff',
-                fontSize: 13,
+                color: limitReached ? '#64748b' : '#fff',
+                fontSize: 16,
                 fontWeight: 700,
-                cursor: 'pointer',
+                cursor: loading || limitReached ? 'not-allowed' : 'pointer',
               }}
             >
-              {copied === 'html' ? '✓ Copied!' : '✉️ Copy for Email'}
+              {loading
+                ? loadingMsg || 'Searching…'
+                : limitReached
+                ? '🔒 Limit Reached'
+                : '🔍  Find Similar Homes'}
             </button>
-          </div>
+          </form>
+
+          {error && !limitReached && (
+            <div
+              style={{
+                marginTop: 14,
+                background: '#450a0a',
+                border: '1px solid #991b1b',
+                borderRadius: 10,
+                padding: '13px 16px',
+                color: '#fca5a5',
+                fontSize: 14,
+              }}
+            >
+              ⚠️ {error}
+            </div>
+          )}
+
+          {comps.length > 0 && !loading && (
+            <div style={{ marginTop: 22 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: 12,
+                }}
+              >
+                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#ffffff' }}>
+                  {comps.length} Similar Active Listings
+                </h2>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={selectAll}
+                    style={{
+                      padding: '5px 12px',
+                      background: '#000000',
+                      border: '1px solid #c8a96e',
+                      borderRadius: 8,
+                      color: '#c8a96e',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Select All
+                  </button>
+                  <button
+                    onClick={clearAll}
+                    style={{
+                      padding: '5px 12px',
+                      background: '#111111',
+                      border: '1px solid #333333',
+                      borderRadius: 8,
+                      color: '#94a3b8',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <p style={{ margin: '0 0 14px', color: '#444444', fontSize: 12 }}>
+                Tap a card to expand details · Tap address to view listing
+              </p>
+              {subject && <SubjectCard subject={subject} />}
+              {comps.map((comp, i) => (
+                <CompCard
+                  key={i}
+                  comp={comp}
+                  subject={subject}
+                  index={i}
+                  isSelected={selected.has(i)}
+                  onToggleSelect={toggleSelect}
+                />
+              ))}
+            </div>
+          )}
+
+          {!subject && !loading && (
+            <div style={{ marginTop: 32, textAlign: 'center', color: '#333333', fontSize: 13 }}>
+              <p>Enter an address to find similar active listings</p>
+              <p style={{ marginTop: 4 }}>Powered by Rentcast · Data updates daily</p>
+            </div>
+          )}
+          <div style={{ height: 120 }} />
         </div>
-      )}
-    </div>
+
+        {selected.size > 0 && (
+          <div
+            style={{
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              background: 'linear-gradient(90deg,#1a1a1a,#000000)',
+              borderTop: '1px solid #c8a96e',
+              padding: '13px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              zIndex: 100,
+              boxShadow: '0 -4px 20px rgba(0,0,0,.5)',
+            }}
+          >
+            <span style={{ color: '#c8a96e', fontWeight: 600, fontSize: 14 }}>
+              {selected.size} propert{selected.size === 1 ? 'y' : 'ies'} selected
+            </span>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => copyMessage(true)}
+                style={{
+                  padding: '9px 16px',
+                  background: copied === 'html' ? '#c8a96e' : 'linear-gradient(90deg,#c8a96e,#a07840)',
+                  border: 'none',
+                  borderRadius: 10,
+                  color: '#fff',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {copied === 'html' ? '✓ Copied!' : '✉️ Copy for Email'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </ErrorBoundary>
   );
 }
